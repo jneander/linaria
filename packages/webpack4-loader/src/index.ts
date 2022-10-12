@@ -87,32 +87,39 @@ export default function webpack4Loader(
           ).toString('base64')}*/`;
         }
 
-        await Promise.all(
+        const dependencies: string[] = await Promise.all(
           result.dependencies?.map((dep) =>
             asyncResolve(dep, this.resourcePath)
           ) ?? []
         );
 
-        getCacheInstance(cacheProvider)
-          .then((cacheInstance) =>
-            cacheInstance.set(this.resourcePath, cssText)
-          )
-          .then(() => {
-            const request = `${outputFileName}!=!${outputCssLoader}?cacheProvider=${encodeURIComponent(
-              cacheProvider ?? ''
-            )}!${this.resourcePath}`;
-            const stringifiedRequest = loaderUtils.stringifyRequest(
-              this,
-              request
-            );
+        try {
+          const cacheInstance = await getCacheInstance(cacheProvider);
 
-            return this.callback(
-              null,
-              `${result.code}\n\nrequire(${stringifiedRequest});`,
-              castSourceMap(result.sourceMap)
-            );
-          })
-          .catch((err: Error) => this.callback(err));
+          await cacheInstance.set(this.resourcePath, cssText);
+
+          await cacheInstance.setDependencies?.(
+            this.resourcePath,
+            dependencies
+          );
+
+          const request = `${outputFileName}!=!${outputCssLoader}?cacheProvider=${encodeURIComponent(
+            cacheProvider ?? ''
+          )}!${this.resourcePath}`;
+          const stringifiedRequest = loaderUtils.stringifyRequest(
+            this,
+            request
+          );
+
+          this.callback(
+            null,
+            `${result.code}\n\nrequire(${stringifiedRequest});`,
+            castSourceMap(result.sourceMap)
+          );
+        } catch (err) {
+          this.callback(err as Error);
+        }
+
         return;
       }
 
